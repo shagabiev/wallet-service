@@ -12,10 +12,7 @@ import (
 
 func main() {
 	dsn := os.Getenv("DB_DSN")
-	port := os.Getenv("APP_PORT")
-	if port == "" {
-		port = "8080"
-	}
+	appPort := os.Getenv("APP_PORT")
 
 	db, err := storage.NewPostgres(dsn)
 	if err != nil {
@@ -23,12 +20,11 @@ func main() {
 	}
 
 	svc := service.New(db)
-	h := handler.New(svc)
+	h := &handler.WalletHandler{Service: svc}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/v1/wallet", h.UpdateWallet)
-	mux.HandleFunc("GET /api/v1/wallets/{id}", h.GetBalance)
+	http.HandleFunc("/api/v1/wallet", h.UpdateBalance)
+	http.HandleFunc("/api/v1/wallets/", h.GetBalance)
 
-	log.Printf("listening on :%s\n", port)
-	log.Fatal(http.ListenAndServe(":"+port, mux))
+	log.Printf("Server started at :%s", appPort)
+	log.Fatal(http.ListenAndServe(":"+appPort, nil))
 }

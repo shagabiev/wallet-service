@@ -8,12 +8,8 @@ import (
 	"github.com/shagabiev/wallet-service/internal/service"
 )
 
-type Handler struct {
-	service *service.Service
-}
-
-func New(s *service.Service) *Handler {
-	return &Handler{service: s}
+type WalletHandler struct {
+	Service *service.Service
 }
 
 type WalletRequest struct {
@@ -22,43 +18,44 @@ type WalletRequest struct {
 	Amount        int64     `json:"amount"`
 }
 
-func (h *Handler) UpdateWallet(w http.ResponseWriter, r *http.Request) {
+type WalletResponse struct {
+	WalletID uuid.UUID `json:"walletId"`
+	Balance  int64     `json:"balance"`
+}
+
+func (h *WalletHandler) UpdateBalance(w http.ResponseWriter, r *http.Request) {
 	var req WalletRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	err := h.service.UpdateBalance(
-		r.Context(),
-		req.WalletID,
-		req.OperationType,
-		req.Amount,
-	)
+	if err := h.Service.UpdateBalance(r.Context(), req.WalletID, req.OperationType, req.Amount); err != nil {
+		if err == service.ErrInsufficientFunds {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	balance, _ := h.Service.GetBalance(r.Context(), req.WalletID)
+	json.NewEncoder(w).Encode(WalletResponse{WalletID: req.WalletID, Balance: balance})
+}
+
+func (h *WalletHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
+	walletIDStr := r.URL.Path[len("/api/v1/wallets/"):]
+	walletID, err := uuid.Parse(walletIDStr)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-}
-
-func (h *Handler) GetBalance(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.Error(w, "invalid uuid", http.StatusBadRequest)
-		return
-	}
-
-	balance, err := h.service.GetBalance(r.Context(), id)
+	balance, err := h.Service.GetBalance(r.Context(), walletID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"walletId": id,
-		"balance":  balance,
-	})
+	json.NewEncoder(w).Encode(WalletResponse{WalletID: walletID, Balance: balance})
 }

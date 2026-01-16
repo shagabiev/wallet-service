@@ -18,46 +18,33 @@ func New(db *sql.DB) *Service {
 	return &Service{db: db}
 }
 
-func (s *Service) UpdateBalance(
-	ctx context.Context,
-	walletID uuid.UUID,
-	operation string,
-	amount int64,
-) error {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelReadCommitted,
-	})
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	var balance int64
-	err = tx.QueryRowContext(
-		ctx,
-		`SELECT balance FROM wallets WHERE id = $1 FOR UPDATE`,
-		walletID,
-	).Scan(&balance)
-	if err != nil {
-		return err
-	}
-
+func (s *Service) UpdateBalance(ctx context.Context, walletID uuid.UUID, operation string, amount int64) error {
 	delta := amount
 	if operation == "WITHDRAW" {
 		delta = -amount
 	}
 
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	var balance int64
+	if err = tx.QueryRowContext(ctx,
+		`SELECT balance FROM wallets WHERE id = $1 FOR UPDATE`, walletID).
+		Scan(&balance); err != nil {
+		tx.Rollback()
+		return err
+	}
+
 	if balance+delta < 0 {
+		tx.Rollback()
 		return ErrInsufficientFunds
 	}
 
-	_, err = tx.ExecContext(
-		ctx,
-		`UPDATE wallets SET balance = balance + $1 WHERE id = $2`,
-		delta,
-		walletID,
-	)
-	if err != nil {
+	if _, err = tx.ExecContext(ctx,
+		`UPDATE wallets SET balance = balance + $1 WHERE id = $2`, delta, walletID); err != nil {
+		tx.Rollback()
 		return err
 	}
 

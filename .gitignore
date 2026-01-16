@@ -1,0 +1,33 @@
+# Go build artifacts
+/bin/
+/obj/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go test cache
+*.test
+*.out
+coverage.out
+
+# Vendor
+/vendor/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.DS_Store
+
+# Environment files
+config.env
+
+# Docker
+*.log
+*.pid
+
+# Misc
+*.tmp
+*.bak
